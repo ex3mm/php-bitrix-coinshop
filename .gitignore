@@ -1,5 +1,5 @@
 .idea
 logs
 .env
-src/*
+src/bitrix
 docker/mysql/db/
