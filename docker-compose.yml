@@ -1,0 +1,100 @@
+version: '3'
+
+services:
+    php:
+        build: ./docker/${PHP_VERSION}
+        volumes_from:
+            - source
+        links:
+            - mysql
+            - memcached
+        networks:
+            - bitrix
+        restart: always
+
+    nginx:
+        build: ./docker/nginx
+        depends_on:
+            - source
+        volumes_from:
+            - source
+        ports:
+            - '${INTERFACE}:${HTTP_PORT:-80}:80'
+            - '${INTERFACE}:${HTTPS_PORT:-443}:443'
+        links:
+            - php
+        networks:
+            - bitrix
+        restart: always
+
+    mysql:
+        build: ./docker/mysql
+        platform: linux/amd64
+        volumes_from:
+            - source
+        ports:
+            - '${INTERFACE}:${MYSQL_PORT:-3306}:3306'
+        environment:
+            MYSQL_DATABASE: ${MYSQL_DATABASE}
+            MYSQL_USER: ${MYSQL_USER}
+            MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+        command: mysqld --sql-mode=""
+        networks:
+            - bitrix
+        restart: always
+        security_opt:
+            - seccomp:unconfined
+
+    memcached:
+        image: memcached:${MEMCACHED_VERSION}
+        volumes_from:
+            - source
+        ports:
+            - '${INTERFACE}:${MEMCACHED_PORT:-11211}:11211'
+        networks:
+            - bitrix
+        restart: always
+
+    phpmyadmin:
+        image: phpmyadmin:latest
+        links:
+          - mysql
+        ports:
+          - '${MYADMIN_PORT:-8082}:80'
+        environment:
+          MYSQL_USERNAME: "${MYSQL_USER}"
+          MYSQL_ROOT_PASSWORD: "${MYSQL_PASSWORD}"
+          PMA_HOST: mysql
+        depends_on:
+          - mysql
+        networks:
+          - bitrix
+
+    source:
+        image: alpine:latest
+        volumes:
+            - ./docker/logs/nginx:/var/log/nginx
+            - ./docker/logs/php:/var/log/php
+            - ./docker/logs/mysql:/var/log/mysql
+            - ./docker/logs/memcached:/var/log/memcached
+            - ./docker/mysql/db:/var/lib/mysql
+            - ./docker/cache:/var/lib/memcached
+            - ./src:/var/www/bitrix
+            - /etc/localtime:/etc/localtime/:ro
+        networks:
+            - bitrix
+
+volumes:
+    db:
+        driver: local
+    cache:
+        driver: local
+
+networks:
+    bitrix:
+        driver: bridge
+        ipam:
+            driver: default
+            config:
+                - subnet: 10.107.0.0/24
